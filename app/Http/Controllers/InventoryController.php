@@ -1,59 +1,68 @@
 <?php
-// app/Http/Controllers/InventoryController.php
+
 namespace App\Http\Controllers;
 
 use App\Models\Inventory;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use App\Http\Requests\StoreInventoryRequest;
+use App\Http\Requests\UpdateInventoryRequest;
 
 class InventoryController extends Controller
 {
+    /**
+     * Display all inventory items.
+     */
     public function index()
     {
-        $auth = Auth::user();
-        $items = Inventory::with('editor')->get();        
-        if (($auth->level === 'developer') || ($auth->level === 'admin')) {
-            // Full feature for dev and admin
+        $items = Inventory::with('editor')->latest()->get();
+
+        // Non-admins see read-only view
+        if ($this->isAdmin()) {
             return view('index.children_views.inventory', compact('items'));
-        } else {
-            // User only see stock
-            return view('index.children_views.inventory_view_only', compact('items'));
         }
+
+        return view('index.children_views.inventory_view_only', compact('items'));
     }
 
-    public function store(Request $request)
+    /**
+     * Store a new inventory item (Admin+ only).
+     */
+    public function store(StoreInventoryRequest $request)
     {
-        $request->validate([
-            'item_name' => 'required|string|max:255',
-            'stock' => 'required|integer|min:0',
-        ]);
-
         Inventory::create([
             'item_name' => $request->item_name,
             'item_price' => $request->item_price,
             'stock' => $request->stock,
-            'last_updated_by' => Auth::id(), // The "By Who"
+            'last_updated_by' => $this->currentUser()->id,
         ]);
 
-        return redirect()->back()->with('success', 'Item Added.');
+        return redirect()->back()->with('success', 'Item added successfully!');
     }
 
-    public function update(Request $request, $inventory) // Change $id to $inventory
+    /**
+     * Update an inventory item (Admin+ only).
+     */
+    public function update(UpdateInventoryRequest $request, $id)
     {
-        $item = Inventory::findOrFail($inventory);
+        $item = Inventory::findOrFail($id);
+        
         $item->update([
-            'item_name' => $request->item_name,
-            'item_price' => $request->item_price,
-            'stock' => $request->stock,
-            'last_updated_by' => Auth::id(),
+            'item_name' => $request->item_name ?? $item->item_name,
+            'item_price' => $request->item_price ?? $item->item_price,
+            'stock' => $request->stock ?? $item->stock,
+            'last_updated_by' => $this->currentUser()->id,
         ]);
 
-        return redirect()->back()->with('success', 'Item Updated.');
+        return redirect()->back()->with('success', 'Item updated successfully!');
     }
 
-    public function destroy($inventory) // Change $id to $inventory
+    /**
+     * Delete an inventory item (Admin+ only).
+     */
+    public function destroy($id)
     {
-        Inventory::findOrFail($inventory)->delete();
-        return redirect()->back()->with('success', 'Item Deleted.');
+        $item = Inventory::findOrFail($id);
+        $item->delete();
+
+        return redirect()->back()->with('success', 'Item deleted successfully!');
     }
 }

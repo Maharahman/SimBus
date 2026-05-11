@@ -1,50 +1,57 @@
 <?php
 
 namespace App\Http\Controllers;
-use App\Models\Service;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 
+use App\Models\Service;
+use App\Http\Requests\StoreServiceRequest;
+use App\Http\Requests\UpdateServiceRequest;
 
 class ServiceController extends Controller
 {
+    /**
+     * Display all services.
+     */
     public function index()
     {
-        $auth = Auth::user();
+        $services = Service::latest()->get();
 
-        if (($auth->level === 'developer') || ($auth->level === 'admin')) {
-            // Full feature for dev and admin
-            $services = Service::all();
+        // Non-admins see read-only view
+        if ($this->isAdmin()) {
             return view('index.children_views.services', compact('services'));
-        } else {
-            // Admins see only their own app_issue reports
-            $services = Service::all();
-            return view('index.children_views.serv_view_only', compact('services'));
         }
-        
+
+        return view('index.children_views.serv_view_only', compact('services'));
     }
 
-    public function store(Request $request)
+    /**
+     * Store a new service (Admin+ only).
+     */
+    public function store(StoreServiceRequest $request)
     {
-        $request->validate([
-            'name' => 'required',
-            'price' => 'required|numeric',
-        ]);
+        Service::create($request->validated());
 
-        Service::create($request->all());
         return redirect()->back()->with('success', 'Service added successfully!');
     }
 
-    public function destroy($id)
-    {
-        Service::findOrFail($id)->delete();
-        return redirect()->back()->with('danger', 'Service deleted!');
-    }
-
-    public function update(Request $request, $id)
+    /**
+     * Update a service (Admin+ only).
+     */
+    public function update(UpdateServiceRequest $request, $id)
     {
         $service = Service::findOrFail($id);
-        $service->update($request->all());
-        return redirect()->back()->with('success', 'Service updated!'); 
+        $service->update($request->validated());
+
+        return redirect()->back()->with('success', 'Service updated successfully!');
+    }
+
+    /**
+     * Delete a service (Admin+ only).
+     */
+    public function destroy($id)
+    {
+        $service = Service::findOrFail($id);
+        $service->delete();
+
+        return redirect()->back()->with('success', 'Service deleted successfully!');
     }
 }

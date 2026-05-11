@@ -3,136 +3,108 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\UserService;
+use App\Http\Requests\StoreUserRequest;
+use App\Http\Requests\UpdateUserRequest;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
-    public function index()
-{
-    if (!Auth::check()) {
-        return redirect()->route('login');
-    }
+    protected UserService $userService;
 
-    $currentUser = Auth::user();
-
-    // Shield Developer accounts from Admins AND hide self from the list
-    if ($currentUser->level !== 'developer') {
-        $users = User::where('level', '!=', 'developer')
-                     ->where('id', '!=', $currentUser->id) // Hide self
-                     ->get();
-    } else {
-        // Developers see everyone EXCEPT themselves
-        $users = User::where('id', '!=', $currentUser->id)->get();
-    }
-
-    return view('index.children_views.user', compact('users'));
-}
-
-    public function store(Request $request)
+    public function __construct(UserService $userService)
     {
-        // Safety check to ensure Auth::user() isn't null
-        $auth = Auth::user();
-        if (!$auth || $auth->level !== 'developer') {
-            return redirect()->back()->with('error', 'Unauthorized.');
-        }
+        $this->userService = $userService;
+    }
 
-        $request->validate([
-            'name' => 'required|string',
-            'sur_name' => 'required|string',
-            'num' => 'required|numeric|unique:users,num',
-            'pass' => 'required|min:6',
-            'level' => 'required|in:admin,user', 
-        ]);
+    /**
+     * Display all users visible to the current user.
+     */
+    public function index()
+    {
+        $currentUser = $this->currentUser();
+        $users = User::visibleTo($currentUser)->excluding($currentUser->id)->get();
 
-        User::create([
-            'name' => $request->name,
-            'sur_name' => $request->sur_name,
-            'num' => $request->num,
-            'pass' => Hash::make($request->pass),
-            'level' => $request->level, 
-        ]);
+        return view('index.children_views.user', compact('users'));
+    }
+
+    /**
+     * Store a new user (Developer only).
+     */
+    public function store(StoreUserRequest $request)
+    {
+        $this->userService->createUser($request->validated());
 
         return redirect()->back()->with('success', 'User created successfully!');
     }
 
-    public function update(Request $request, $id)
+    /**
+     * Update user information.
+     */
+    public function update(UpdateUserRequest $request, $id)
     {
-        $auth = Auth::user();
         $user = User::findOrFail($id);
-
-        // Prevent non-developers from editing others
-        if (!$auth || ($auth->level !== 'developer' && $auth->id !== $user->id)) {
-            return redirect()->back()->with('error', 'Unauthorized.');
+        
+        $data = $request->validated();
+        
+        // Only developers can change levels
+        if ($this->currentUser()->level !== 'developer') {
+            unset($data['level']);
         }
 
-        $request->validate([
-            'num' => 'required|numeric|unique:users,num,' . $id,
-            'level' => 'required|in:admin,user,developer'
-        ]);
+        $this->userService->updateUser($user, $data);
 
-        $user->name = $request->name;
-        $user->sur_name = $request->sur_name;
-        $user->num = $request->num;
-
-        // Only developer can change account levels
-        if ($auth->level === 'developer') {
-            $user->level = $request->level;
-        }
-
-        if ($request->filled('pass')) {
-            $user->pass = Hash::make($request->pass);
-        }
-
-        $user->save();
         return redirect()->back()->with('success', 'User updated!');
     }
 
+    /**
+     * Delete a user (Developer only).
+     */
     public function destroy($id)
     {
-        $auth = Auth::user();
         $user = User::findOrFail($id);
+        $currentUser = $this->currentUser();
 
-        // Deny if not developer OR trying to delete a developer
-        if (!$auth || $auth->level !== 'developer' || $user->level === 'developer') {
-            return redirect()->back()->with('error', 'Action denied.');
+        if (!$this->userService->canDelete($currentUser, $user)) {
+            return $this->unauthorized('Cannot delete this user.');
         }
 
         $user->delete();
+
         return redirect()->back()->with('success', 'User deleted.');
     }
 
+    /**
+     * Update user profile.
+     */
     public function updateProfile(Request $request)
     {
-        $user = Auth::user();
-        if (!$user) return redirect()->route('login');
+        $user = $this->currentUser();
+        if (!$user) {
+            return redirect()->route('login');
+        }
 
         $request->validate([
-            'name' => 'required',
-            'sur_name' => 'required',
-            'num' => 'required|numeric|unique:users,num,' . $user->id,
+            'name' => 'sometimes|required|string|max:255',
+            'sur_name' => 'sometimes|required|string|max:255',
+            'num' => 'sometimes|required|numeric|unique:users,num,' . $user->id,
+            'pass' => 'sometimes|nullable|min:6',
             'profile_photo' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
-        $user->name = $request->name;
-        $user->sur_name = $request->sur_name;
-        $user->num = $request->num;
+        $data = $request->only(['name', 'sur_name', 'num', 'pass']);
 
         if ($request->hasFile('profile_photo')) {
+            // Delete old photo if exists
             if ($user->profile_photo && file_exists(storage_path('app/public/' . $user->profile_photo))) {
                 unlink(storage_path('app/public/' . $user->profile_photo));
             }
             
-            $path = $request->file('profile_photo')->store('profiles', 'public');
-            $user->profile_photo = $path;
+            $data['profile_photo'] = $request->file('profile_photo')->store('profiles', 'public');
         }
 
-        if ($request->filled('pass')) {
-            $user->pass = Hash::make($request->pass);
-        }
+        $this->userService->updateUser($user, array_filter($data));
 
-        $user->save();
         return redirect()->back()->with('success', 'Profile updated successfully!');
     }
 }

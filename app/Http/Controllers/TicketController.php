@@ -3,121 +3,100 @@
 namespace App\Http\Controllers;
 
 use App\Models\Ticket;
-use App\Models\User;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
+use App\Services\TicketService;
+use App\Services\UserService;
+use App\Http\Requests\StoreTicketRequest;
+use App\Http\Requests\ApproveTicketRequest;
 
 class TicketController extends Controller
 {
-    public function index()
+    protected TicketService $ticketService;
+    protected UserService $userService;
+
+    public function __construct(TicketService $ticketService, UserService $userService)
     {
-        $auth = Auth::user();
-
-        if ($auth->level === 'developer') {
-            $tickets = Ticket::with('user')->latest()->get();
-            return view('index.children_views.dev_tickets', compact('tickets'));
-        } else {
-            $tickets = Ticket::where('user_id', $auth->id)
-                ->where('category', 'app_issue')
-                ->latest()
-                ->get();
-            return view('index.children_views.admin_tickets', compact('tickets'));
-        }
-    }
-
-    public function store(Request $request)
-    {
-        $auth = Auth::user();
-
-        $lastTicket = Ticket::orderBy('id', 'desc')->first();
-        if (!$lastTicket || !$lastTicket->ticket_id) {
-            $nextId = 'CK00000001';
-        } else {
-            $number = intval(substr($lastTicket->ticket_id, 2)) + 1;
-            $nextId = 'CK' . str_pad($number, 8, '0', STR_PAD_LEFT);
-        }
-
-        Ticket::create([
-            'ticket_id' => $nextId,
-            'user_id'   => $auth ? $auth->id : null,
-            'user_num'  => $auth ? $auth->num : ($request->num ?? null),
-            'category'  => $auth ? 'app_issue' : 'registration',
-            'subject'   => $request->subject ?? 'New User Registration',
-            'message'   => $request->message ?? 'Requesting access to SimBus',
-            'status'    => 'Open',
-            'registration_data' => !$auth ? json_encode($request->all()) : null,
-        ]);
-
-        return redirect()->back()->with('success', "Ticket $nextId submitted.");
+        $this->ticketService = $ticketService;
+        $this->userService = $userService;
     }
 
     /**
-     * Logic for User Registrations
-     * Uses: Approve / Reject
+     * Display tickets based on user level.
      */
-    public function approve(Request $request, $id)
+    public function index()
+    {
+        $currentUser = $this->currentUser();
+
+        if ($this->isDeveloper()) {
+            $tickets = Ticket::with('user')->latestFirst()->get();
+            return view('index.children_views.dev_tickets', compact('tickets'));
+        }
+
+        $tickets = Ticket::forUser($currentUser)->appIssues()->latestFirst()->get();
+        return view('index.children_views.admin_tickets', compact('tickets'));
+    }
+
+    /**
+     * Store a new ticket.
+     */
+    public function store(StoreTicketRequest $request)
+    {
+        $currentUser = auth()->user();
+        $ticket = $this->ticketService->createTicket($currentUser, $request->validated());
+
+        return redirect()->back()->with('success', "Ticket {$ticket->ticket_id} submitted.");
+    }
+
+    /**
+     * Approve or reject a registration ticket.
+     */
+    public function approve(ApproveTicketRequest $request, $id)
     {
         $ticket = Ticket::findOrFail($id);
-        $regData = json_decode($ticket->registration_data, true);
-        $devName = Auth::user()->sur_name;
 
         if ($request->decision === 'reject') {
-            $ticket->update([
-                'status' => 'Reject',
-                'handled_by' => $devName,
-                'dev_reply' => $request->reject_reason ?? 'Registration denied by administrator.'
-            ]);
+            $this->ticketService->rejectTicket($ticket, $this->currentUser(), $request->reject_reason);
             return back()->with('success', 'Registration rejected.');
         }
 
-        if (!$regData) {
-            return redirect()->back()->with('error', 'Registration data is missing or corrupt.');
+        try {
+            $user = $this->ticketService->approveRegistration(
+                $ticket,
+                $this->currentUser(),
+                $request->level ?? 'user'
+            );
+
+            return redirect()->back()->with('success', "User {$user->sur_name} approved!");
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', $e->getMessage());
         }
-
-        DB::transaction(function () use ($regData, $ticket, $request, $devName) {
-            User::create([
-                'name' => $regData['name'],
-                'sur_name' => $regData['sur_name'],
-                'num' => $regData['num'],
-                'pass' => $regData['pass'] ?? $regData['password'],
-                'level' => $request->level,
-                'profile_photo' => null,
-            ]);
-
-            $ticket->update([
-                'status' => 'Approve',
-                'handled_by' => $devName,
-                'message' => 'User approved by ' . $devName . ' on ' . now()->format('d M, H:i')
-            ]);
-        });
-
-        return redirect()->back()->with('success', 'User ' . $regData['sur_name'] . ' approved!');
     }
 
     /**
-     * Logic for app_issue Reports
-     * Uses: Open / Progress / Closed
+     * Update ticket status (for app issues).
      */
-    public function updateStatus(Request $request, $id)
+    public function updateStatus(StoreTicketRequest $request, $id)
     {
         $ticket = Ticket::findOrFail($id);
-        $devName = Auth::user()->sur_name;
 
-        // If you are closing an app_issue, it sets status to 'Closed'
-        // If it's just moving to progress, it stays 'Progress'
-        $ticket->update([
-            'status'     => $request->status, // Values: 'Open', 'Progress', 'Closed'
-            'handled_by' => ($request->status !== 'Open') ? $devName : null,
-            'dev_reply'  => $request->dev_reply 
-        ]);
+        $this->ticketService->updateTicketStatus(
+            $ticket,
+            $request->status ?? 'Open',
+            $this->currentUser()
+        );
 
-        return redirect()->back()->with('success', 'Ticket #' . $ticket->ticket_id . ' status updated to ' . $request->status);
+        return redirect()->back()->with('success', "Ticket #{$ticket->ticket_id} status updated to {$request->status}");
     }
 
+    /**
+     * Delete a ticket.
+     */
     public function destroy($id)
     {
-        Ticket::findOrFail($id)->delete();
-        return redirect()->back()->with('success', 'Ticket deleted.');
+        $ticket = Ticket::findOrFail($id);
+        $ticketId = $ticket->ticket_id;
+        
+        $ticket->delete();
+
+        return redirect()->back()->with('success', "Ticket {$ticketId} deleted.");
     }
 }
