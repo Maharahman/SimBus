@@ -1,0 +1,151 @@
+* {
+  font-family: 'Nunito Sans', sans-serif;
+}
+
+:root {
+  --shadowDark: #141414;
+  --background: #252525;
+  --shadowLight: #333333;
+  
+  --inputBackGround:#333333;
+  --inputPlaceHolder:#585858;
+  --inputShadowLight:#444343;
+  --inputShadowDark : #141414;
+
+  --buttonIdleBackground : #f1a706;
+  --buttonIdleShadowDark : #c59207;
+  --buttonIdleShadowLight : #725e04;
+
+  --buttonHoverBackground : #3a2d08;
+  --buttonHoverShadowDark : #c59207;
+  --buttonHoverShadowLight : #725e04;
+}
+
+body {
+  background: var(--background);
+}
+
+.hero-body {
+  justify-content: center;
+}
+
+.login {
+  border-radius: 25px;
+  padding: 1.5rem;
+  box-shadow: 9px 9px 12px var(--shadowDark), -8px -8px 15px var(--shadowLight);
+}
+
+.input::placeholder {
+  color: var(--inputPlaceHolder) !important;
+}
+
+input {
+  background: var(--inputBackGround) !important;
+  border: none !important;
+  outline: none;
+  box-shadow: inset 2px 2px 5px var(--inputShadowDark), 
+              inset -5px -5px 10px var(--inputShadowLight) !important;
+  border-color: transparent;
+}
+
+a {
+  font-weight: 600;
+}
+
+
+/* Chrome, Safari, Edge, Opera */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.is-login {
+    /* Base Emboss Style */
+    border: none !important;
+    background: var(--buttonIdleBackground);
+    outline: none;
+    box-shadow: inset 2px 2px 5px var(--buttonIdleShadowDark), 
+              inset -5px -5px 10px var(--buttonIdleShadowLight) !important;
+    color:#141414;
+}
+
+.is-login:hover {
+    border: none !important;
+    background: var(--buttonHoverBackground);
+    outline: none;
+    box-shadow: inset 2px 2px 5px var(--buttonHoverShadowDark), 
+              inset -5px -5px 10px var(--buttonHoverShadowLight) !important;
+    color:#f1a706;}
+
+
+  /* Remove any border from the entire card */
+    .modal-card {
+        border: none !important;
+        box-shadow: 0 12px 28px rgba(5, 5, 5, 0.3) !important; /* Optional: Nice soft shadow */
+    }
+
+    /* Target inner modal parts to remove borders and padding issues */
+    .modal-card-head, .modal-card-foot, .is-borderless {
+        border: none !important;
+        border-bottom: none !important;
+        border-top: none !important;
+    }
+
+    /* Ensure background is seamless dark */
+    .modal-card-head, .modal-card-body, .modal-card-foot {
+        background-color: #1a1d20 !important; /* Or whatever your dark background color is */
+    }
+
+    /* Style for the button exactly like login */
+    .modal-card-foot {
+        padding: 1.5rem !important; /* Give space around the full-width button */
+    }
+
+    /* Custom Gold Scrollbar for the modal body */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #1a1d20; /* Matches your dark background */
+      border-radius: 10px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #ffb82b; /* Your Cukur Gold color */
+      border-radius: 10px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #e5a527; /* Slightly darker gold on hover */
+    }
+
+    /* Remove Bulma default modal borders */
+    .modal-card, .modal-card-head, .modal-card-foot {
+      border: none !important;
+    }
+
+    .modal-card-body {
+      border: none !important;
+    }
+
+    /* Ensure the delete button is visible on dark background */
+    .delete::before, .delete::after {
+      background-color: #ffb82b !important;
+    }
+
+    .position-relative { position: relative; }
+    .position-absolute { position: absolute; }
+
+
+    .notification.is-warning.is-light {
+    background-color: rgba(255, 184, 43, 0.15) !important;
+    border: 1px solid #ffb82b !important;
+    color: #ffb82b !important;
+    backdrop-filter: blur(5px); /* Adds a modern touch */
+}
+
+.notification .delete {
+    background-color: #ffb82b !important;
+}
