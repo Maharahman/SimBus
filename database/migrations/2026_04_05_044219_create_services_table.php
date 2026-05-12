@@ -12,8 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('services', function (Blueprint $table) {
-            $table->name();
-            $table->price();
+            $table->string('name');
+            $table->int('price');
         });
     }
 
