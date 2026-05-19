@@ -15,9 +15,9 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('sur_name');
-            $table->string('num');
+            $table->int('num');
             $table->string('pass');
-            $table->integer('levels');
+            $table->string('levels');
             $table->timestamps();
         });
     }
