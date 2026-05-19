@@ -10,6 +10,7 @@ use App\Services\UserService;
 use App\Services\TicketService;
 use App\Services\DashboardService;
 use App\Services\TransactionService;
+use Illuminate\Support\Facades\URL;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -41,5 +42,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('admin', function (User $user) {
             return in_array($user->level, ['admin', 'developer']);
         });
+
+        if (config('app.env') === 'production' || app()->environment('production')) {URL::forceScheme('https');}
     }
 }
